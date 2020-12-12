@@ -1,9 +1,9 @@
 /*
 === OBTENCION DE MÉTRICAS SOBRE EL ESTADO DE UN CULTIVO ===
-                    SENTINEL 2
+                    SENTINEL-2
 
 El código extrae, en una función aplicada a la
-colección Sentinel 2, los valores medios de varios índices
+colección Sentinel-2, los valores medios de varios índices
 de vegetación (IV) en cada una de las imágenes de la colección. 
 El resultado es un gráfico que muestra el valor medio de las 
 imágenes durante el total de temporadas de cultivo, puede ser 
@@ -13,9 +13,6 @@ Los IV disponibles son:
 - NDVI
 - NDRE
 - IRECI
-  
-El código recorta las imágenes con los recintos
-cultivadas dentro de la temporada de cultivo.
 
 AVISO: Si la serie de años es muy larga es posible que haya 
 que ejecutar la función varias veces para mostrar el gráfico
@@ -23,13 +20,13 @@ final (ejecutar otra vez siempre que salga el error de tiempo
 de procesamiento agotado)
 
 ------------------|| INPUTS ||----------------------------
-Capa con los recintos cultivados:
+1. Capa con los recintos cultivados:
   - Nº de columnas equivalente al número de años de la serie 
   (nombre de columna = año)
   - Los valores de las filas se corresponden con la producción
   en cada recinto.
 
-Colección de Sentinel 2. 
+2. Colección de Sentinel-2. 
 
 Nota: La colección incluida en el este script es la unión de 
 dos colecciones. La primera (2015-10-01 hasta 2017-03-31)
@@ -44,7 +41,7 @@ en el apartado "Unión de las colecciones".
 S2serietemporal(coleccion, IV, a_inicio,mes_inicio,dia_inicio,
                 a_final,mes_final,dia_final);
 
-donde "coleccion": Colección Sentinel 2
+donde "coleccion": Colección Sentinel-2
 "IV": Índice de vegetación a calcular. Elegir uno de los disponibles
 "a_inicio": Año de inicio de la primera temporada de
 cultivo de la serie
@@ -52,16 +49,16 @@ cultivo de la serie
 "dia_inicio": Día de inicio de la temporada
 "a_final": Año final de la temporada contenida en la 
 serie
-"mes_final": Mes de finalización de la temporada
+"mes_final": Mes final de la temporada
 "dia_final": Día final de la temporada
 
-Nota: En la zona de estudio la cebada se siembra a comienzos 
-de octubre y se termina de cosechar a finales de julio.
-
+Nota: En la explotación de estudio el cultivo se siembra 
+a comienzos de octubre y se termina de cosechar a finales de 
+julio.
 
 ---------------|| DESARROLLO DEL CÓDIGO ||------------------
 1)  Definir las funciones necesarias en la aplicación de
-  la máscara de sombras, modificada de (Schmitt, 2019). 
+  la máscara de sombras, modificada de Schmitt et al. (2019). 
 
   - Parámetros generales:
     - Umbrales de las máscaras
@@ -127,13 +124,8 @@ PIA19+MRSS19 - Photogrammetric Image Analysis & Munich Remote Sensing
 Symposium: Joint ISPRS conference (Volume IV-2/W7) - Copernicus GmbH,
 pp. 145–152. https://doi.org/10.5194/isprs-annals-IV-2-W7-145-2019
 
-
-Gao, B., 1996. NDWI – a normalized difference water index for
-remote sensing of vegetation liquid water from space. Remote
-Sensing of Environment,58(3), 257 – 266.
-
-Hall, D.K., Riggs, G. A., 2011. Normalized-Difference Snow
-Index (NDSI). Springer Netherlands, Dordrecht, 779–780.
+Wilson, R. T. (2013). Py6S: A Python interface to the 6S radiative 
+transfer model. Comput. Geosci. - UK, 51(2), 166-171.
 ---------------------------------------------------------------
 */
 
