@@ -10,11 +10,11 @@ Funciones para las constelaciones Sentinel-1 y Sentinel-2 que permiten la extrac
   
 ## Índices de vegetación
 Están disponibles, en la función de Sentinel-1
-  -CR (\*)
+-CR (\*)
 y en la función Sentinel-2:
-  -NDVI
-  -NDRE
-  -IRECI
+-NDVI
+-NDRE
+-IRECI
 
 Puede añadirse cualquier índice definiendo su ecuación dentro del código y llamándola en la función principal.
 
