@@ -87,6 +87,9 @@ manualmente a través de la consola de GEE.
 // ----------- CARGAR LA CAPA CON LOS RECINTOS ------------- \\
 var AOI = ee.FeatureCollection('users/iranzocristian/explotacion_blcht_buffer20m');
 
+// Enlace para obtener la capa con la que se desarrolla el código
+// https://code.earthengine.google.com/?asset=users/iranzocristian/explotacion_blcht_buffer20m
+
 
 // ----------------   FILTRAR COLECCIÓN   ------------------ \\
 
