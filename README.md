@@ -7,6 +7,7 @@ Funciones para las constelaciones Sentinel-1 y Sentinel-2 que permiten la extrac
 - Google Earth Engine
 - Capa en formato *shapefile* con los recintos cultivados:
   1. Nº de columnas equivalente al número de años de la serie (nombre de columna = año)
+  // Enlace para obtener la capa con la que se desarrolla el SCRIPT https://code.earthengine.google.com/?asset=users/iranzocristian/explotacion_blcht_buffer20m
   2. Los valores de las filas se corresponden con la producción en cada recinto, o en su defecto con un código que indique si han sido producidos o no en dicho año.
   
 ## Índices de vegetación
