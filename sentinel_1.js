@@ -5,54 +5,51 @@
 El código extrae, en una función aplicada a la colección 
 Sentinel 1, los valores medios del cociente VH/VV sobre los 
 recintos cultivados. El resultado es un gráfico con todas las
-imágenes en las temporadas comprendidas dentro de la serie 
-temporal analizada.
-  
-Las imágenes se recortan sobre los recintos cultivados 
-en la temporada durante la que han sido tomadas.
+imágenes dentro de la serie temporal analizada.
 
 AVISO: Si la serie de años es muy larga es posible que haya 
 que ejecutar la función varias veces para mostrar el gráfico
 final
 
 ------------------|| INPUTS ||----------------------------
-Capa con los recintos cultivados:
+1. Capa con los recintos cultivados:
   - Nº de columnas equivalente al número de años de la serie 
   (nombre de columna = año)
   - Los valores de las filas se corresponden con la producción
   en cada recinto.
 
-Colección Sentinel 1, polarizaciones VH y VV.
+2. Colección Sentinel 1
 
 ------------------|| FUNCIÓN ||---------------------------
 
 S1serietemporal(coleccion, a_inicio,mes_inicio,dia_inicio,
                 a_final,mes_final,dia_final);
 
-donde "coleccion": Colección Sentinel 1
+donde 
+"coleccion": Colección Sentinel 1
 "a_inicio": Año de inicio de la primera temporada de
 cultivo a analizar
 "mes_inicio": Mes de inicio de la temporada regular
-"dia_inicio": Día de inicio "
+"dia_inicio": Día de inicio " " " "
 "a_final": Año final de serie a analizar
 "mes_final": Mes final de la temporada regular
-"dia_final": Día  final "
+"dia_final": Día  final " " " "
 
-Nota: En Belchite la cebada se siembra a comienzos de octubre 
-y se termina de cosechar a finales de julio.
+Nota: En el área de la explotación donde se definió la función
+la siembra del cultivo comienza en octubre y se termina de 
+cosechar a finales de julio.
 
 ----------------|| DESARROLLO DE LA FUNCIÓN ||---------------
-Se declaran las funciones necesarias para calcular el 
+1. Se define la colección se Sentinel-1
+
+2. Se declaran las funciones necesarias para calcular el 
 cociente VH/VV:
 1) Cálculo de la inversa del logaritmo, obteniendo nuevamente
 valores sigma.
 2) Aplicar el cociente entre las bandas sin transformar.
 3) Volver a convertir el resultado en dB.
 
-Este proceso asegura resultados comparables entre los trabajos
-que aplican este índice.
-
-Comienza la función principal:
+3. Comienza la función principal:
 - Se definen los años inicio y final sobre los que calcular el cociente. 
   El índice se calculará automáticamente entre las temporadas de cultivo 
   presentes dentro de dicho intervalo temporal. 
