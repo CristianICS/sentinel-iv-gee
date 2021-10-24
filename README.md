@@ -143,7 +143,7 @@ geom = ee.Geometry.Polygon([[-0.9570796519011493,40.98197275411647],
 
 # Descomentar la siguiente linea si ee.Geometry.Polygon no funciona
 # geom = ee.Geometry.Rectangle(-0.996, 41.508, -0.568, 40.992)
-# Modificar el poligono anterior para poder recortar la imagen final
+# Obtener las coordenadas de geom para recortar las imagenes de la coleccion
 region = geom.buffer(1000).bounds().getInfo()['coordinates']
 ```
 4) Creacion de la función para corregir imágenes en bucle
@@ -242,14 +242,9 @@ def conversion(img):
   export.start()
   return print("imagen "+assetID+" exportada")
 # Final de la funcion de conversion en bucle
-
-"""
-Aplicar la funcion de conversion en bucle a una
-coleccion GEE:
-1. Definir la coleccion
-2. Aplicar la funcion de conversion en todas las
-   imagenes de la coleccion
-"""
+```
+5) Aplicar la funcion de conversion en bucle a una coleccion GEE. Primero se define la colección y despues se aplica la conversión dentro de un bucle a todas las imágenes que contiene.
+```py
 # Definir coleccion GEE
 S2 = ee.ImageCollection('COPERNICUS/S2')\
   .filterBounds(geom)\
