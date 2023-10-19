@@ -1,4 +1,5 @@
 # sentinel-iv-gee
+
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.4318779.svg)](https://doi.org/10.5281/zenodo.4318780)
 
 Funciones para las constelaciones Sentinel-1 y Sentinel-2 que permiten la extracción de índices de vegetación sobre explotaciones agrícolas sometidas a un régimen de rotación de cultivos.
@@ -36,7 +37,7 @@ La salida de las funciones es un gráfico con los valores medios del IV sobre lo
 ## Especificaciones de la función Sentinel-2
 Desde junio de 2015 hasta el 28 de marzo de 2017 las imágenes S2 en GEE solo disponen del nivel de tratamiento 1C, i.e., sin corrección atmosférica. 
 
-En el código de la función para Sentinel-2, el segundo apartado permite integrar imágenes de este período corregidas automáticamente con el modelo 6s y almacenadas dentro de la nube de GEE. La corrección atmosférica se aplica mediante el código creado por Sam Murphy (https://github.com/samsammurphy/gee-atmcorr-S2), modificado para corregir en bucle todas las imágenes utilizadas. Este paso puede omitirse dependiendo de los objetivos del trabajo.
+En el código de la función para Sentinel-2, el segundo apartado permite integrar imágenes de este período corregidas automáticamente con el modelo 6s y almacenadas dentro de la nube de GEE. La corrección atmosférica se aplica mediante el código creado por [Sam Murphy](https://github.com/samsammurphy/gee-atmcorr-S2), modificado para corregir en bucle todas las imágenes utilizadas. Este paso puede omitirse dependiendo de los objetivos del trabajo.
 
 ### Corrección atmosférica en bucle
 A continuación se detalla la modificación del código de Sam Murphy realizada para corregir en bucle todas las imágenes de una colección. Esta se incluye dentro del archivo jupyter notebook que se ejecuta al iniciar el repositorio: `sentinel2_atmospheric_correction.ipynb`.
