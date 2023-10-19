@@ -1,6 +1,5 @@
 # sentinel-iv-gee
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.4318779.svg)](https://doi.org/10.5281/zenodo.4318780)
-10.5281/zenodo.4318779
 Funciones para las constelaciones Sentinel-1 y Sentinel-2 que permiten la extracción de índices de vegetación sobre explotaciones agrícolas sometidas a un régimen de rotación de cultivos.
 
 ## Requisitos
