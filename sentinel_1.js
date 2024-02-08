@@ -1,279 +1,265 @@
 /*
-=== OBTENCION DE MÉTRICAS SOBRE EL ESTADO DE UN CULTIVO ===
-                    SENTINEL 1
+===============================================================================
+========               GET METRICS OVER CULTIVATED CROPS               ========
+========                         SENTINEL 1                            ========
+===============================================================================
 
-El código extrae, en una función aplicada a la colección 
-Sentinel 1, los valores medios del cociente VH/VV sobre los 
-recintos cultivados. El resultado es un gráfico con todas las
-imágenes dentro de la serie temporal analizada.
+The code extracts mean values of VH/VV (CR) index over cultivated crops.
 
-AVISO: Si la serie de años es muy larga es posible que haya 
-que ejecutar la función varias veces para mostrar el gráfico
-final
+----------------------------------- INPUTS ------------------------------------
+1)
+SHP with plots from one agricultural holding. It have to contain columns with
+the production units of each plot, and the column names need to be the final
+year of the season in which production values are obtained.
 
-------------------|| INPUTS ||----------------------------
-1. Capa con los recintos cultivados:
-  - Nº de columnas equivalente al número de años de la serie 
-  (nombre de columna = año)
-  - Los valores de las filas se corresponden con la producción
-  en cada recinto.
+Example:
 
-2. Colección Sentinel 1
+| ID | 2014 | 2015 | 2016 |
+|----|------|------|------|
+| 1  | 400  | 0    | 250  |
+| 2  | 0    | 800  | 0    |
+| 3  | 300  | 0    | 100  |
 
-------------------|| FUNCIÓN ||---------------------------
+The above agricultural holding have three fields which are cultivated
+alternatively over the years. The even years two ones are used (the fallow ones
+has 0 production), and odd years only one is used.
+    
+2) Sentinel 1 image collection ("COPERNICUS/S1_GRD").
+    
+--------------------------------- FUNCTIONS -----------------------------------
+1) Perform CR index. First, dB values are transformed to sigma units. Then,
+CR ratio is computed and, finally, sigma CR values are converted to dB units.
 
-S1serietemporal(coleccion, a_inicio,mes_inicio,dia_inicio,
-                a_final,mes_final,dia_final);
+2) Define main function, which creates a FeatureCollection with CR mean values
+per image over cultivated plots in the current season.
 
-donde 
-"coleccion": Colección Sentinel 1
-"a_inicio": Año de inicio de la primera temporada de
-cultivo a analizar
-"mes_inicio": Mes de inicio de la temporada regular
-"dia_inicio": Día de inicio " " " "
-"a_final": Año final de serie a analizar
-"mes_final": Mes final de la temporada regular
-"dia_final": Día  final " " " "
+Note: Inside the example agricultural holding plots (barley), the season starts
+in early October and ends in late July.
 
-Nota: En el área de la explotación donde se definió la función
-la siembra del cultivo comienza en octubre y se termina de 
-cosechar a finales de julio.
-
-----------------|| DESARROLLO DE LA FUNCIÓN ||---------------
-1. Se define la colección se Sentinel-1
-
-2. Se declaran las funciones necesarias para calcular el 
-cociente VH/VV:
-1) Cálculo de la inversa del logaritmo, obteniendo nuevamente
-valores sigma.
-2) Aplicar el cociente entre las bandas sin transformar.
-3) Volver a convertir el resultado en dB.
-
-3. Comienza la función principal:
-- Se definen los años inicio y final sobre los que calcular el cociente. 
-  El índice se calculará automáticamente entre las temporadas de cultivo 
-  presentes dentro de dicho intervalo temporal. 
-- Se define una variable que contendrá las colecciones de imágenes con
- las métricas calculadas de todas las temporadas. 
-- Se crea la función que recorta las imágenes sobre los recintos cultivados 
-  en la temporada de adquisición de la propia imagen.
-
-A continuación se ejecuta un bucle FOR, filtrando la colección de
-imágenes por cada temporada de cultivo, recortando las imágenes por 
-los cultivos sembrados en la temporada y calculando el valor medio en
-cada una de las imágenes. Los pasos se detallan a continuación (se
-repiten durante todas las temporadas de la serie)
-0) Se define el iterador como el primer año de la serie. A cada iteración 
-   completada se sumará un año, y el bucle se interrumpirá al llegar al 
-   último año de la serie.
-1) Filtrar la capa con los cultivos de la explotación por el año y los
-   valores de producción superiores a 0 (son los campos cultivados)
-2) Seleccionar las imágenes dentro de la temporada de cultivo
-3) Recortarlas por la capa espacial del paso 1)
-4) Aplicar las funciones para crear el cociente VH/VV
-5) Condicional IF: se vuelve al primer año de la temporada de cultivo del
-   bucle y
-   a) Si el año coincide con el primer año de la serie la colección de
-   imágenes se integra a la colección creada en la primera parte de la función
-   b) Si es un año distinto, la colección se suma a las colecciones integradas
-   con anterioridad utilizando la función merge()
-
-Al finalizar el bucle se muestra en un gráfico la serie temporal con todos los 
-valores medios de CR durante las temporadas de cultivo analizadas. Se exporta a CSV 
-manualmente a través de la consola de GEE.
----------------------------------------------------------------
+-------------------------------------------------------------------------------
 */
 
-// ----------- CARGAR LA CAPA CON LOS RECINTOS ------------- \\
-var AOI = ee.FeatureCollection('users/iranzocristian/explotacion_blcht_buffer20m');
+// Load SHP with the agricultural holding plots
+var AOI = ee.FeatureCollection('users/iranzocristian/explotacion');
 
-// Enlace para obtener la capa con la que se desarrolla el código
-// https://code.earthengine.google.com/?asset=users/iranzocristian/explotacion_blcht_buffer20m
+// Link to obtain the above layer
+// https://code.earthengine.google.com/?asset=users/iranzocristian/explotacion
 
-
-// ----------------   FILTRAR COLECCIÓN   ------------------ \\
-
-// Cargar la colección Sentinel-1
+// Load Sentinel1 collection
 var sentinel1 = ee.ImageCollection('COPERNICUS/S1_GRD')
-  // Obtener imágenes con polarizacion VV y VH
-  .filter(ee.Filter.listContains(
-    'transmitterReceiverPolarisation', 'VV'))
-  .filter(ee.Filter.listContains(
-    'transmitterReceiverPolarisation', 'VH'))
-                
-  // Filtrar por las imágenes obtenidas en modo 
+  // Filter images with VV or VH polarisation
+  .filter(ee.Filter.listContains('transmitterReceiverPolarisation', 'VV'))
+  .filter(ee.Filter.listContains('transmitterReceiverPolarisation', 'VH'))
   // 'Interferometric Wide Swath'
-  .filter(ee.Filter.eq('instrumentMode', 'IW'))
-                
-  // Filtrar imágenes de alta resolucion
-  .filter(ee.Filter.eq('resolution', 'H'));
+  .filter(ee.Filter.eq('instrumentMode', 'IW'))             
+  // High resolution images
+  .filter(ee.Filter.eq('resolution', 'H'))
+  .filterBounds(AOI);
 
-// Dividir la coleccion en función de la pasada
 
-// Se selecciona la trayectoria descendente, presenta mejores ángulos 
-// de incidencia para analizar cultivos
-var s1Descending = sentinel1.filter(
-  ee.Filter.eq('orbitProperties_pass', 'DESCENDING'));
+// Uncomment the next code chuck to compare the two orbits indicent angles
+// ---------------------------------- Init chunk
+// var s1_des = sentinel1
+//   .filter(ee.Filter.eq('orbitProperties_pass', 'DESCENDING'))
+//   .select('angle');
+// var s1_asc = sentinel1
+//   .filter(ee.Filter.eq('orbitProperties_pass', 'ASCENDING'))
+//   .select('angle');
+// var des_chart = ui.Chart.image.series(s1_des, AOI, ee.Reducer.mean(), 2000, 'system:time_start');
+// print(des_chart.setOptions({'title':'Mean Angle, Descending orbit'}));
+// var asc_chart = ui.Chart.image.series(s1_asc, AOI, ee.Reducer.mean(), 2000, 'system:time_start');
+// print(asc_chart.setOptions({'title':'Mean Angle, Ascending orbit'}));
+// ---------------------------------- Finish chunk
 
-// ············| Cálculo del cociente VH/VV |·············\\
+// Select descending orbits, less incident angle oscilations (see above chunk)
+var sentinel1_des = sentinel1.filter(
+    ee.Filter.eq('orbitProperties_pass', 'DESCENDING'));
 
-// Funciones para aplicar la transformación de la inversa 
-// del logaritmo (de dB a valores sigma lineales)
-  
-// Transformación de la banda VH
-  
-var s1vh_invlog = function(img){
+// Define functions to apply CR ratio
+
+/**
+ * Apply inverse log transformation
+ * ============================================================================
+ * 
+ * From dB to lineal sigma units.
+ * 
+ * @param {EEImage} img
+ * @returns 
+*/
+var invLog = function(img){
     
-  // Expresión
-  var vh_log = img.expression(
-  'pow(10,(vh/10))',
+    var expression = 'pow(10,(b/10))';
+    var vh_sg = img.expression(expression, {b: img.select('VH')}).toDouble();
+    var vv_sg = img.expression(expression, {b: img.select('VV')}).toDouble();
+    
+    var transformed_img = vh_sg.select([0], ['VH_sigma'])
+    .addBands(vv_sg.select([0], ['VV_sigma']))
+
+    return img.addBands(transformed_img);
+};
+
+/**
+ * Apply log transformation
+ * ============================================================================
+ * Convert band values from lineal sigma units to dB.
+ * 
+ * @param {EEImage} img 
+ * @param {String} bandname CR 
+ * @returns 
+ */
+var toDB = function(img, bandname){
+
+    var transformed = img.expression('10 * log10(b)', 
+    {b: img.select(bandname)}).toDouble();
+    
+    // Update band with transformed one
+    return transformed;
+};
+
+/**
+ * Compute VH/VV coeficient (Cross Ratio)
+ * ============================================================================
+ * 
+ * Compute CR index. 
+ * 
+ * The VH and VV bands are transformed to sigma values prior performing the
+ * calculation. Then, the CR are converted again into db units.
+ * 
+ * @param {EEImage} img 
+ * @returns 
+*/
+var applyCR = function(img){
+  
+  // First perform the inverse log transformation (obtain sigma)
+  var sigma = invLog(img);
+  
+  // Then, apply CR index to above bands
+  var cr = sigma.expression('vh / vv',
   {
-      vh: img.select('VH')  // Banda con polarizacion VH
-  }).toDouble();
-    
-  // Resultado
-  return vh_log.select([0],['vh'])
-  // Seleccionar las propiedades a incluir en la nueva imagen
-        .copyProperties(img, ['system: index', 'resolution_meters', 
-          'totalSlices', 'productType', 'orbitProperties_pass'
-          , 'system:time_start']);
-};
-    
-// Transformación de la banda VV
-var s1vv_invlog = function(img){
-    
-  // Expresión
-  var vv_log = img.expression(
-    'pow(10,(vv/10))',
-  {
-      vv: img.select('VV')  // Banda con polarizacion VV
-  }).toDouble();
-    
-  // Resultado
-  return vv_log.select([0],['vv'])
-  // Seleccionar las propiedades a incluir en la nueva imagen
-        .copyProperties(img, ['system: index', 'resolution_meters', 
-          'totalSlices', 'productType', 'orbitProperties_pass'
-          , 'system:time_start']);
-};
+      vh: sigma.select('VH_sigma'),    
+      vv: sigma.select('VV_sigma'),    
+  }).toDouble()
+  // Rename the band with the index
+  .select([0], ['CR']);
   
-// Funcion que calcula el cociente VH/VV 
-// Las bandas seleccionadas son las creadas con las funciones anteriores
-var s1Index = function(img){
-    
-   // Expresion
-   var index = img.expression(
-	'vh / vv',
-   {
-      vh: img.select('vh'),    // Banda con polarizacion VH
-      vv: img.select('vv'),    // Banda con polarizacion VV
-   }).toDouble();
+  // Transform CR values (in sigma) to dB
+  var cr_db = toDB(cr, 'CR');
   
-   // Resultado
-   return index.select([0], ['vh/vv'])
-          .copyProperties(img, ['system: index', 'resolution_meters', 
-          'totalSlices', 'productType', 'orbitProperties_pass'
-          , 'system:time_start']);
-};
-  
-// Funcion que transforma el resultado del cociente a dB
-
-var s1Trans = function(img){
-// Expresion
-var index = img.expression(
-  '10 * log10(cr)',
-  {
-      cr: img.select('vh/vv'),    // Banda con el cociente
-  }).toDouble();
-  
-// Resultado
-return index.select([0], ['vh/vv_db'])
-          .copyProperties(img, ['system: index', 
-          'resolution_meters', 'totalSlices', 'productType', 
-          'orbitProperties_pass', 'system:time_start']);
+  // Add index to the original image
+  return img.addBands(cr_db.select([0], ['CR']));
 };
 
+// Define the function to perform the CR series.
 
-// --------------- INICIO DE LA FUNCIÓN ----------------- \\
-var S1serietemporal = function(coleccion,
-                                a_inicio,mes_inicio,dia_inicio,
-                                a_final,mes_final,dia_final){
-
-  // Establecer los años de la serie
-  var yearrangeStart = a_inicio;
-  var yearrangeStop = a_final;
+/**
+ * Get CR mean values over predefined crop seasons
+ * ===========================================================================
+ * The function iterate over season years and compute CR mean values over the
+ * images inside an image collection. Each CR band is reducing with cultivated
+ * crops in the image date crop season.
+ * 
+ * E.g.: A crop season from 2015-10-01 to 2016-07-31. One image captured in
+ * 2015-04-13 will be reduced using plots with more than 0 production units in
+ * 2016 campaign (2016 column inside the SHP with the plots).
+ * 
+ * @param {EEImageCollection} col It must contain images with CR band. 
+ * @param {EEList} season_years Season start years
+ * @param {EEList} start MONTH and DAY numbers of the season start
+ * @param {EEList} end MONTH and DAY nummbers of the season end
+ * @returns FeatureCollection with CR mean value and image date.
+ */
+var getSeries = function(col, season_years, start, end){
   
-  // Generar la coleccion con todas las imágenes
-  var col;
+  // Iterate over season start years, returning a list.
+  var mean_cr = season_years.map(function(year){
+    
+    // Get season periods
+    var end_year = ee.Number(year).add(1);
+    var season_start = ee.Date.fromYMD(year, start.get(0), start.get(1));
+    var season_end = ee.Date.fromYMD(end_year, end.get(0), end.get(1));
+    
+    // Select images inside current season
+    var filtered_col = col.filterDate(season_start, season_end);
+    
+    // Compute CR from above filtered collection
+    var cr_db = filtered_col.map(applyCR);
+    
+    // Filter cultivated fields inside the season last year
+    var str_year = season_end.get('year').format('%.0f'); // String mandatory
+    var cultivated_plots = AOI.filter(ee.Filter.gt(str_year, 0));
+    
+    /**
+     * Reduce CR over season cultivated plots
+     * =========================================
+     * Get an image with CR band and obtain the mean value over the pixels
+     * masked inside the cultivated plots in a current season.
+     * 
+     * Note: It's mandatory having a FeatureCollection called
+     * "cultivated_plots".
+     * 
+     * @param {EEImage} img Image with CR band.  
+     * @returns Feature with an image date and CR mean value.
+     */
+    var reduceCR = function(img){
+      // Select the CR band
+      var cr = img.select('CR');
 
-  // Funcion para recortar la coleccion
-  var clip = function(image){return image.clip(cultivo)};
-  // La variable "cultivo" se define más adelante,
-  // integra las parcelas cultivadas en la temporada seleccionada
-  
-// ··········| Cálculo de las series temporales |············\\
+      // Reduce CR values over cultivated plots
+      var cr_mean = cr.reduceRegion(ee.Reducer.mean(), cultivated_plots);
+      // Note: The scale is computed automatically to avoid time consuming
 
-  // Loop a través de los años 
-  // Crear una serie de cada temporada de cultivo
-  for(var loopYear = yearrangeStart; loopYear < yearrangeStop; loopYear +=1){
-    // Seleccionar la temporada de producción con la que seleccionar recintos
-    var prod_temp = loopYear += 1;
-    // Se suma un año, pues los valores de producción utilizados en el 
-    // filtro de parcelas están en el año siguiente al comienzo de la temporada
-    
-    // Se vuelve al año inicial de la temporada
-    loopYear -= 1;
-    
-    // Seleccionar los campos sembrados con cebada en la temporada
-    var cultivo = AOI.filter(ee.Filter.gt(prod_temp.toString(), 1));
-    
-    // Seleccionar las fechas de filtrado (de temporada en temporada)
-    var start = ee.Date.fromYMD(loopYear, mes_inicio, dia_inicio);
-    var end = ee.Date.fromYMD(loopYear +=1, mes_final, dia_final);
+      // Construct a Feature with the image date and the CR mean value
+      return ee.Feature(null, {'date': img.date(), 'CR': cr_mean.get('CR')});
+      
+    };
 
-    // Filtrar la colección por fecha y recortar la colección con 
-    // los recintos anteriores
-    var imgClip = coleccion.filterDate(start, end).map(clip);
-    
-    // CALCULO DEL COCIENTE VH/VV
-    // Aplicar la inversa del logaritmo a cada banda
-    var imgClip_vh = imgClip.map(s1vh_invlog);
-    var imgClip_vv = imgClip.map(s1vv_invlog);
-    
-    // Combinar las dos colecciones anteriores en una sola
-    var combine = imgClip_vh.combine(imgClip_vv);
-    
-    // Calcular el cociente VH/VV
-    var imgCInv = combine.map(s1Index);
-    
-    // Transformar a dB
-    var imgCIndB = imgCInv.map(s1Trans);
-    
-    // Volver al año de inicio de la temporada
-    loopYear -= 1;
-    // Condicional IF:
-    // Si el bucle trabaja con el primer año de la serie crea la colección
-    if(loopYear == a_inicio){
-      col = imgCIndB;
-    // El resto de años incluirá las imágenes en la coleccion anterior
-    } else if(loopYear > a_inicio && loopYear < a_final){ 
-      col = col.merge(imgCIndB);
-    }
-  } // Fin del bucle FOR
+    // Apply above function over all images inside filtered collection
+    var fc = cr_db.map(reduceCR);
+    // The above line returns a FeatureCollection with equal number of
+    // features than filtered images
 
-  // Crear el grafico
-  var chart = ui.Chart.image.series({
-      imageCollection: col,
-      region: AOI,
-      // Calcular la media de cada imagen
-      reducer: ee.Reducer.median(),
-      scale: 10
+    // Important: A map() method applied over an ee.List must return a list.
+    // In order to return a list, each feature inside prior FeatureCollection
+    // is passed inside a list: [<Feature>,<Feature>,...]
+    return fc.toList(100); // The max entities number is mandatory.
+    
   });
-  // Nombrarlo en función de los años de la serie temporal
-  var filename = ("des_VHVV_sum_").concat(a_inicio.toString().concat("-")
-      .concat(a_final.toString()));
-  print(chart, filename);
+  
+  // The object mean_cr is a list of lists with Features
+  // [[<Feature>,<Feature>,...],[],...]
+
+  // Obtain a FeatureCollection with all Features
+  // 1) Flatten the list (get only one list with all features)
+  // 2) Transform its to a FeatureCollection
+  return ee.FeatureCollection(mean_cr.flatten());
 };
 
-// Aplicar la función anterior a la colección
-S1serietemporal(s1Descending,2015,10,1,2020,7,31);
+// Apply getSeries with custom season parameters
+// Note: Inside the example agricultural holding plots (barley), 
+// the season starts in early October and ends in late July.
+
+// Season start years
+var years = ee.List.sequence(2014, 2019);
+// Season start: month and day
+var start = ee.List([10,1]);
+// Season end: month and day
+var end = ee.List([8,1]);
+// End is exclusive in ee.ImageCollection.filterDate(start,end)
+
+// Get FeatureCollection with all images reduced by cultivated fields
+var cr_mean = getSeries(sentinel1_des, years, start, end).sort('date');
+
+print('Number of computed images:', cr_mean.size());
+
+// Plot values in a chart
+var chart = ui.Chart.feature.byFeature(cr_mean, 'date', 'CR');
+print(chart);
+
+// Export FeatureCollection to CSV
+Export.table.toDrive({
+  collection: cr_mean,
+  description: 'Export_CR_mean_over_cultivated_plots',
+  folder: 'data',
+  fileNamePrefix: 'cr_mean'
+});
+// Note: system:index property is the image ID from the CR mean is computed.
