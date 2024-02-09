@@ -1,474 +1,462 @@
 /*
-=== OBTENCION DE MÉTRICAS SOBRE EL ESTADO DE UN CULTIVO ===
-                    SENTINEL-2
+===============================================================================
+========               GET METRICS OVER CULTIVATED CROPS               ========
+========                         SENTINEL 2                            ========
+===============================================================================
+The code extracts mean values of different VI over cultivated crops.
 
-El código extrae, en una función aplicada a la
-colección Sentinel-2, los valores medios de varios índices
-de vegetación (IV) en cada una de las imágenes de la colección. 
-El resultado es un gráfico que muestra el valor medio de las 
-imágenes durante el total de temporadas de cultivo, puede ser 
-exportado a CSV. 
+VI (Vegetation Indices);
 
-Los IV disponibles son:
 - NDVI
 - NDRE
 - IRECI
 
-AVISO: Si la serie de años es muy larga es posible que haya 
-que ejecutar la función varias veces para mostrar el gráfico
-final (ejecutar otra vez siempre que salga el error de tiempo
-de procesamiento agotado)
+----------------------------------- INPUTS ------------------------------------
+1)
+SHP with plots from one agricultural holding. It have to contain columns with
+the production units of each plot, and the column names need to be the final
+year of the season in which production values are obtained.
 
-------------------|| INPUTS ||----------------------------
-1. Capa con los recintos cultivados:
-  - Nº de columnas equivalente al número de años de la serie 
-  (nombre de columna = año)
-  - Los valores de las filas se corresponden con la producción
-  en cada recinto.
+Example:
 
-2. Colección de Sentinel-2. 
+| ID | 2014 | 2015 | 2016 |
+|----|------|------|------|
+| 1  | 400  | 0    | 250  |
+| 2  | 0    | 800  | 0    |
+| 3  | 300  | 0    | 100  |
 
-Nota: La colección incluida en el este script es la unión de 
-dos colecciones. La primera (2015-10-01 hasta 2017-03-31)
-esta compuesta por imágenes corregidas a reflectividad BOA
-a partir de los productos Sentinel 2 nivel 1C (reflectividad
-TOA), mediante el modelo 6s. La segunda es la colección de 
-Sentinel 2 nivel 2A (2017-04-01 hasta 2020-07-31). 
-El proceso de unión de las dos colecciones es el detallado 
-en el apartado "Unión de las colecciones".
+The above agricultural holding have three fields which are cultivated
+alternatively over the years. The even years two ones are used (the fallow ones
+has 0 production), and odd years only one is used.
+    
+2) Sentinel 2 image collections:
 
-------------------|| FUNCIÓN ||---------------------------
-S2serietemporal(coleccion, IV, a_inicio,mes_inicio,dia_inicio,
-                a_final,mes_final,dia_final);
+- "COPERNICUS/S2_HARMONIZED" (from 2015-06-27)
+- "COPERNICUS/S2_SR_HARMONIZED" (from 2017-03-28)
 
-donde "coleccion": Colección Sentinel-2
-"IV": Índice de vegetación a calcular. Elegir uno de los disponibles
-"a_inicio": Año de inicio de la primera temporada de
-cultivo de la serie
-"mes_inicio": Mes de inicio de la temporada
-"dia_inicio": Día de inicio de la temporada
-"a_final": Año final de la temporada contenida en la 
-serie
-"mes_final": Mes final de la temporada
-"dia_final": Día final de la temporada
+Note: In order to increase the number of scenes, images between 2015-06-27 and
+2017-03-28 (collection S2_HARMONIZED) have been atmospherically corrected with
+6S and included inside S2_SR_HARMONIZED collection. The S2_HARMONIZED collection
+only have 1C products (TOA reflectance).
 
-Nota: En la explotación de estudio el cultivo se siembra 
-a comienzos de octubre y se termina de cosechar a finales de 
-julio.
+--------------------------------- FUNCTIONS -----------------------------------
+1) Define parameters and functions to perform a shadow mask, plus functions to
+compute the VIs.
 
----------------|| DESARROLLO DEL CÓDIGO ||------------------
-1)  Definir las funciones necesarias en la aplicación de
-  la máscara de sombras, modificada de Schmitt et al. (2019). 
+2) Initialize S2 collections.
 
-  - Parámetros generales:
-    - Umbrales de las máscaras
-    - Alturas de las nubes
-  
-  - Función "dilatedErossion": Extender la máscara de sombras sobre 
-    los píxeles adyacentes
+3) Define main function (L359), which creates a FeatureCollection with VI mean
+values per image over cultivated plots in the current season.
 
-  - Función "projectShadows": Crea una nueva banda en la imagen
-    con la probabilidad de sombra (0-1) en cada píxel
+Note: Inside the example agricultural holding plots (barley), the season starts
+in early October and ends in late July.
 
-2) Integrar los inputs de la función:
-  - Capa con los recintos
-  - Coleccion de Sentinel 2:
-    - Es el resultado de la unión entre las dos colecciones,
-      integrando en cada imagen la información sobre la
-      probabilidad de nubes procedente de la colección de 
-      imágenes 'COPERNICUS/S2_CLOUD_PROBABILITY'
-
-3) Aplicar las máscaras de nubes y sombras
-
-4) Crear las funciones para calcular los IV 
-
-5) Función principal: cálculo de series temporales de IV
-
-  - Se definen los años inicio y final sobre los que calcular el IV.
-  - Se define una variable que contendrá las colecciones de imágenes con
-    las métricas calculadas de todas las temporadas. 
-  - Se crea la función que recorta las imágenes sobre los recintos cultivados 
-    en la temporada de adquisición de la propia imagen.
-
-  Bucle FOR: filtra la colección de imágenes por cada temporada de cultivo, 
-  recortando las imágenes por los cultivos sembrados en la temporada y calculando 
-  el valor medio en cada una de las imágenes. Los pasos se detallan a continuación (se
-  repiten durante todas las temporadas de la serie):
-
-0) Se define el iterador como el primer año de la serie. A cada iteración 
-   completada se sumará un año, y el bucle se interrumpirá al llegar al 
-   último año de la serie.
-1) Filtrar la capa con los cultivos de la explotación por el año y los
-   valores de producción superiores a 0 (son los campos cultivados)
-2) Seleccionar las imágenes dentro de la temporada de cultivo
-3) Recortarlas por la capa espacial del paso 1)
-4) Aplicar la función para calcular el IV
-5) Condicional IF: se vuelve al primer año de la temporada de cultivo del
-   bucle y
-   a) Si el año coincide con el primer año de la serie la colección de
-   imágenes se integra a la colección creada en la primera parte de la función
-   b) Si es un año distinto, la colección se suma a las colecciones integradas
-   con anterioridad utilizando la función merge()
-
-Al finalizar el bucle se muestra en un gráfico la serie temporal con todos los 
-valores medios del indicador durante las temporadas de cultivo filtradas.
-
-6) Llamar a la función principal
-
-Referencias:
-Schmitt, M., Hughes, L.H., Qiu, C., Zhu, X.X., 2019. Aggregating 
-cloud-free Sentinel-2 images with Google Earth Engine, in: 
-ISPRS Annals of Photogrammetry, Remote Sensing and Spatial 
-Information Sciences. Presented at the ISPRS ICWG II/III
+--------------------------------- REFERENCES -----------------------------------
+Schmitt, M., Hughes, L.H., Qiu, C., Zhu, X.X., 2019. Aggregating cloud-free
+Sentinel-2 images with Google Earth Engine, in: ISPRS Annals of Photogrammetry,
+Remote Sensing and Spatial Information Sciences. Presented at the ISPRS ICWG II/III
 PIA19+MRSS19 - Photogrammetric Image Analysis & Munich Remote Sensing 
-Symposium: Joint ISPRS conference (Volume IV-2/W7) - Copernicus GmbH,
-pp. 145–152. https://doi.org/10.5194/isprs-annals-IV-2-W7-145-2019
+Symposium: Joint ISPRS conference (Volume IV-2/W7) - Copernicus GmbH, pp. 145–152.
+https://doi.org/10.5194/isprs-annals-IV-2-W7-145-2019
+https://www.isprs-ann-photogramm-remote-sens-spatial-inf-sci.net/IV-2-W7/145/2019/
 
-Wilson, R. T. (2013). Py6S: A Python interface to the 6S radiative 
-transfer model. Comput. Geosci. - UK, 51(2), 166-171.
----------------------------------------------------------------
+Wilson, R. T. (2013). Py6S: A Python interface to the 6S radiative transfer model.
+Comput. Geosci. - UK, 51(2), 166-171.
+----------------------------------------------------------------------------------
 */
 
-// ---------------- MÁSCARA DE NUBES Y SOMBRAS-------------------- \\
-// Parámetros generales
-var max_probN = 65; // umbral a partir del cuál un píxel es considerado nube
-var max_probS = 0.02; // umbral a partir del cuál se considera sombra (tantos por uno)
-var ndviThresh = -0.1;  // Umbral de sombras en función del NDVI
-var irSumThresh = 0.3;  // Umbral de sombras en función de las bandas infrarrojas
+var AOI = ee.FeatureCollection('users/iranzocristian/explotacion');
+// Link to obtain the above layer
+// https://code.earthengine.google.com/?asset=users/iranzocristian/explotacion
 
-// Parámetros de extensión de la máscara sobre píxeles adyacentes
-var erodePixels = 1.5;
-var dilationPixels = 3;
+// Thresholds for Cloud and Shadow masks:
+// 1. Cloud pixels are >= CLOUD_PROB
+var CLOUD_PROB = 45; 
+// 2. Shadow pixels are >= SHADOW_PROB
+var SHADOW_PROB = 20; 
+// 3. Water pixels are <= NDVI_THRESHOLD
+var NDVI_THRESHOLD = -0.1;
+// 4. Dark pixels are <= IR_THRESHOLD
+var IR_THRESHOLD = 0.3; 
 
-// Alturas medias de las nubes
-// Utilizadas en la proyección de sus sombras
-var cloudHeights = ee.List.sequence(200,10000,250);
+// Parameters for extending shadow mask over near pixels (Schmitt et al., 2019)
+var ERODE_PIXELS = 1.5;
+var DILATION_PIXELS = 3;
+// Cloud heights to proyect shadow masks
+var CLOUD_HEIGHTS = ee.List.sequence(200,10000,250);
 
-
-function dilatedErossion(score) {
-// Se aplica a la capa con la probabilidad de sombras
-  score = score
-          .reproject('EPSG:4326', null, 20)
-          .focal_min({radius: erodePixels, 
-            kernelType: 'circle', iterations:3})
-          .focal_max({radius: dilationPixels, 
-            kernelType: 'circle', iterations:3})
-          .reproject('EPSG:4326', null, 20);
-                
-  return(score);
-}
+/**
+ * Compute cloud shadow mask
+ * ===========================================================================
+ * From (Schmitt et al., 2019)
+ * https://www.isprs-ann-photogramm-remote-sens-spatial-inf-sci.net/IV-2-W7/145/2019/
+ * @param {EEImage} img It must contain a CLOUD_PROBABILITY mask 
+ * @returns 
+ */
+function projectShadows(img){
   
-// ··········| Cálculo de la probabilidad de sombra |············\\
-// ··········|          dentro de un píxel          |············\\
-
-// Función que proyecta las sombras de las nubes
-function projectShadows(image){
-  // Ángulos de iluminación
-  var meanAzimuth = image.get('MEAN_SOLAR_AZIMUTH_ANGLE');
-  var meanZenith = image.get('MEAN_SOLAR_ZENITH_ANGLE');
+  // Get solar angles (perform illumination geometry calculations)
+  var mean_azi = img.get('MEAN_SOLAR_AZIMUTH_ANGLE');
+  var mean_zen = img.get('MEAN_SOLAR_ZENITH_ANGLE');
   
-  // Banda con la probabilidad de nubes, procedente de la colección
-  // "COPERNICUS/S2_CLOUD_PROBABILITY", utilizada para localizar
-  // los píxeles con nubes
-  var cloudMask = ee.Image(image.get('cloud_mask'))
-                  .select('probability').gt(max_probN);
-  
+  // Get cloud probability mask
+  var clouds = ee.Image(img.get('cloud_mask')).select('probability');
+  var cloud_mask = clouds.gt(CLOUD_PROB);
     
-  // Localizar píxeles oscuros (región infrarroja)
-  var darkPixelsImg = image.select(['B8','B11','B12'])
-                        .reduce(ee.Reducer.sum());
+  // Find dark pixels (infrared region)
+  var dark_pixels = img.select(['B8','B11','B12']).reduce(ee.Reducer.sum());
+  var dark_mask = dark_pixels.lt(IR_THRESHOLD);
 
-  // Localizar píxeles oscuros asociados con agua
-  var ndvi = image.normalizedDifference(['B8','B4']);
-  var waterMask = ndvi.lt(ndviThresh);
+  // Find dark pixels linked with water (not cloud shadows)
+  var ndvi = img.normalizedDifference(['B8','B4']);
+  var water_mask = ndvi.lt(NDVI_THRESHOLD);
   
-  // Obtener píxeles de sombra
-  var darkPixels = darkPixelsImg.lt(irSumThresh);
-    
-  // Crear la máscara de sombras excluyendo el agua
-  var darkPixelMask = darkPixels.and(waterMask.not());
-  darkPixelMask = darkPixelMask.and(cloudMask.not());
+  // Get dark pixels (probably) related with cloud shadows
+  var shadow_mask = dark_mask.and(water_mask.not()); // Exclude water
+  shadow_mask = shadow_mask.and(cloud_mask.not()); // Exclude clouds
      
-  // Localizar las sombras de las nubes, basado en la 
-  // geometría de iluminación (convertida en radianes)
-  var azR = ee.Number(meanAzimuth).add(180).multiply(Math.PI)
-            .divide(180.0);
-  var zenR = ee.Number(meanZenith).multiply(Math.PI)
-            .divide(180.0);
+  // Detect shadows by illumination geometry 
+  // Angles in radians: multiply the number of degrees by pi/180
+  var mean_azi_radians = ee.Number(mean_azi).add(180)
+    .multiply(Math.PI).divide(180.0);
+  var mean_zen_radians = ee.Number(mean_zen)
+    .multiply(Math.PI).divide(180.0);
+  // Note: Math.PI is a JavaScript Object
       
-  // Localizar las sombras de las nubes
-  var shadows = cloudHeights.map(function(cloudHeight){
-      cloudHeight = ee.Number(cloudHeight);
-     
-        var shadowCastedDistance = zenR.tan()
-               .multiply(cloudHeight);  // Clasificación según altura
-        var x = azR.sin().multiply(shadowCastedDistance)
-               .multiply(-1); // distancia de sombras, coord. X
-        var y = azR.cos().multiply(shadowCastedDistance)
-               .multiply(-1); // distancia de sombras, coord. Y
+  /**
+   * Find shadows
+   * =========================================================================
+   * Move cloud pixels to its likely shadow position.
+   * 
+   * @param {Integer} cloud_height 
+   * @returns A list with EEImages (one per height value)
+   */
+  var findShadows = function(cloud_height){
+    
+    var height = ee.Number(cloud_height);
+    
+    // Compute projected shadow distance related with height
+    var shadow_casted_dist = mean_zen_radians.tan().multiply(height);
+    // Coordinate X shadow distance
+    var x = mean_azi_radians.sin().multiply(shadow_casted_dist)
+      .multiply(-1);
+    // Coordinate Y shadow distance
+    var y = mean_azi_radians.cos().multiply(shadow_casted_dist)
+      .multiply(-1);
+    
+    // Get and image containing displacement values.
+    var shadow_img = ee.Image.constant(x).addBands(ee.Image.constant(y));
+    // Shift clouds values over their shadows
+    return clouds.displace(shadow_img);
+  };
+  
+  // Obtain expected shadow pixels from cloud values by height
+  var shadows = CLOUD_HEIGHTS.map(findShadows);
+    
+  // Group the above shadow images inside a collection
+  var shadow_coll = ee.ImageCollection.fromImages(shadows);
+  // Get mean shadow probability over all cloud heights
+  var shadow_height_mask = shadow_coll.mean();
+    
+  // Update shadow mask (it has been initialized with dark pixels)
+  shadow_mask = shadow_height_mask.multiply(shadow_mask);
+  
+  /**
+   * Apply circular kernel
+   * =========================================================================
+   * Smooth shadow mask.
+   * 
+   * @param {EEImage} shadow_prob EEImage with shadow probability
+   * @returns 
+   */
+  function dilatedErossion(shadow_prob) {
 
-        // Aplica una máscara sobre los píxeles de sombra
-        // desplazando los valores de la máscara de nubes sobre sus sombras
-        return ee.Image(image.get('cloud_mask'))
-                 .select('probability').displace(ee.Image.constant(x)
-        .addBands(ee.Image.constant(y)));
-  });
-    
-  // Agrupar las máscaras de sombras creadas en la función anterior
-  // dentro de una colección
-  var shadowMasks = ee.ImageCollection.fromImages(shadows);
-  var shadowMask = shadowMasks.mean();
-    
-  // Crear la máscara de sombras
-  shadowMask = dilatedErossion(shadowMask.multiply(darkPixelMask));
+    // Apply kernels
+    var dilated = shadow_prob
+    // .reproject('EPSG:4326', null, 20)
+    .focal_min({
+      radius: ERODE_PIXELS, kernelType: 'circle', iterations:3
+    })
+    .focal_max({
+      radius: DILATION_PIXELS, kernelType: 'circle', iterations:3
+    })
+    // .reproject('EPSG:4326', null, 20);
+                  
+    return(dilated);
+  }
+  
+  var shadow_mask_dilated = dilatedErossion(shadow_mask);
    
-  // Crear la nueba banda con los píxeles sobre sombras
-  var shadowScore = shadowMask.reduceNeighborhood(
+  // Perform a reduce neighbourhood operation
+  var shadow_score = shadow_mask_dilated.reduceNeighborhood(
       {
           reducer: ee.Reducer.max(),
           kernel: ee.Kernel.square(1)
       });
-    
-  image = image.addBands(shadowScore.rename(['shadowScore']));
-    
-  return image;
-} 
-
-// ---------------------- INPUTS ---------------------- \\
-// ···········| Recintos de la explotación |·············\\
-var AOI = ee.FeatureCollection(
-  'users/iranzocristian/explotacion_blcht_buffer20m');
-
-// ·············|       Colección       |·················\\
-
-// UNIR COLECCIÓN DE GEE Y COLECCIÓN CORREGIDA CON 6S
-
-// Cargar la colección Sentinel 2 (nivel 2A) de GEE
-var sentinel2 = ee.ImageCollection("COPERNICUS/S2_SR")
-        // Filtrar por area de estudio
-        .filterBounds(AOI)
-
-        // Filtrar por fecha (comienzo al acabar la serie de 
-        // imágenes corregidas con 6S - S2_6s)
-        .filterDate('2017-03-21', '2020-07-31')
-
-        // Primer filtro de nubes
-        .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 40))
-
-        // Convertir valores a reflectividad, conservando
-        // las propiedades de la imagen original
-        .map(function(img){
-          var properties = img.propertyNames();
-          return(img.divide(10000)
-                  .copyProperties(img, properties)) })
-
-        // Ordenar según la fecha de adquisición
-        .sort('system:time_start');
-
-// AÑADIR LAS IMÁGENES CON EL PORCENTAJE DE NUBES
-// Cargar colección con el porcentaje de nubes
-var inicio = ee.Date('2015-10-01');
-var final = ee.Date('2020-07-31');
-
-var S2Clouds = ee.ImageCollection(
-               'COPERNICUS/S2_CLOUD_PROBABILITY')
-               .filterBounds(AOI).filterDate(inicio,final);
-
-// Unir la imagen con el porcentaje de nubes a cada imagen de la
-// colección S2 nivel 2A
-var sentinel2n = ee.Join.saveFirst('cloud_mask').apply({
-    primary: sentinel2,
-    secondary: S2Clouds,
-    condition:
-        ee.Filter.equals({leftField: 'system:index', rightField: 'system:index'})
-});       
-
-// Cargar la colección Sentinel-2 corregida 
-// Ubicación de las imágenes
-var asset = 'users/iranzocristian/s2_6s/';
-
-// Matriz con el número de imágenes
-var image = ee.data.listAssets(asset);
-
-// Seleccionar las imágenes del elemento anterior
-var imageList = image['assets'];
-
-// Obtener el número de imágenes
-var num_img = imageList.length;
-// Restarle uno, el iterador comenzará en el 0
-num_img = num_img -= 1;
-
-// Crear una nueva lista con el id de las imágenes
-// 1. Definir una lista en blanco
-var imageIDs = [];
-// 2. Crear iterador
-var i;
-
-// 3. Bucle for: integrar en la lista vacía cada uno
-// de los id's de las imágenes contenidas en la carpeta,
-// variable imageList
-
-for(i=0;i <= num_img; i++){
-    // guardar el id
-    var imageid = imageList[i].id;
-    // incluirlo en la lista
-    imageIDs.push(ee.Image(imageid.toString()));
+  
+  // Add shadow propability mask to the original image
+  return img.addBands(shadow_score.rename(['MSK_SDWPRB']));
 }
 
-// Crear la colección de imágenes a partir de la lista anterior
-var S2_6s = ee.ImageCollection.fromImages(imageIDs);
+/**
+ * Mask pixels with clouds
+ * ===========================================================================
+ * 
+ * @param {EEImage} img It must contain 'cloud_mask' property. 
+ * @returns 
+ */
+var applyCloudMask = function(img){
+  // Get probability band from COPERNICUS/S2_CLOUD_PROBABILITY collection
+  var cloud_prob = ee.Image(img.get('cloud_mask')).select('probability');
+  // Create band with 1 values for pixels below cloud probability threshold  
+  var cloud_mask = cloud_prob.lt(CLOUD_PROB);
+  
+  return img.updateMask(cloud_mask);
+};
 
-// AÑADIR EL PORCENTAJE DE NUBES 
-// Unir la imagen con el porcentaje de nubes a cada imagen de la
-// coleccion
-var S2_6sn = ee.Join.saveFirst('cloud_mask').apply({
-  primary: S2_6s,
-  secondary: S2Clouds,
-  condition:
-      ee.Filter.equals({leftField: 'fileID', rightField: 'system:index'})
+/**
+ * Mask pixels with cloud shadows
+ * ===========================================================================
+ * 
+ * @param {EEImage} img
+ * @returns 
+*/
+var applyShadowMask = function(img){
+
+  // Compute a cloud shadow probability mask inside the image
+  var simg = projectShadows(img);  
+  // Create band with 1 values for pixels below shadow probability threshold  
+  var shadow_mask = simg.select('MSK_SDWPRB').lt(SHADOW_PROB);
+
+  return img.updateMask(shadow_mask);
+};
+
+/**
+ * Apply scale factor
+ * ===========================================================================
+ * Add a constant over stored S2 values to return reflectance plus REMAIN the
+ * original image properties.
+ * 
+ * Note: This code could be executed with original INT values, because the VI
+ * compute a ratio between several bands (whatever the value is). The S2 imgs
+ * are corrected by the constant because the 6S correction yields reflectance
+ * values.
+ * 
+ * The 'system:index' is written inside fileID property inside the 6S
+ * corrected images. 'system:index' property in S2_SR collection is set inside
+ * 'fileID' property in order to join both collections with
+ * COPERNICUS/S2_CLOUD_PROBABILITY collection.
+ * 
+ * @param {EEImage} img 
+ * @returns 
+ */
+var reflectance = function(img){
+  var r = img.divide(10000);
+  // Set new property
+  r = r.set('fileID', img.id());
+  // Add properties in the original image
+  var props = img.propertyNames();
+  
+  return r.copyProperties(img, props);
+};
+
+/**
+ * Compute Vegetation Indices
+ * ==========================================================================
+ * Add a new band per computed VI. Each VI band must contain a prefix 'VI_'
+ * for selecting then inside getSeries() function.
+ * 
+ * Note: NDVI index is masked to remove saturated pixels and no vegetation.
+ * 
+ * @param {EEImage} img 
+ * @returns 
+ */
+var computeVI = function(img){
+  
+  // Compute NDVI   
+  var ndvi = img.normalizedDifference(['B8', 'B4']).rename('VI_NDVI');
+  // Mask values with saturated pixels (gt 0.9) and water/soil (lt 0.1)
+  var quality_mask = ndvi.lt(0.9).and(ndvi.gt(0.1));
+  var ndvi_masked = ndvi.updateMask(quality_mask);
+  
+  // Compute NDRE
+  var ndre = img.normalizedDifference(['B7', 'B4']).rename('VI_NDRE');
+  // Compute IRECI
+  var ireci = img.expression('(re3-r)/(re1/re2)',
+    {
+      re3: img.select('B7'),
+      r: img.select('B4'),
+      re1: img.select('B5'),
+      re2: img.select('B6')
+  }).rename('VI_IRECI');
+
+  return img.addBands(ndvi_masked).addBands(ndre).addBands(ireci)
+    .copyProperties(img, img.propertyNames());
+};
+
+// Load Sentinel 2 collection (2A)
+var sentinel2 = ee.ImageCollection("COPERNICUS/S2_SR")
+  .filterBounds(AOI)
+  .map(reflectance);
+
+// Load S2 images corrected with 6S
+var assetList = ee.data.listAssets("users/iranzocristian/s2_6s")['assets']
+  .map(function(asset) { return asset.name });
+var sentinel2_6s = ee.ImageCollection(assetList);
+
+// Merge the two above collections
+sentinel2 = sentinel2.merge(sentinel2_6s);
+
+// Load collection with Cloud Probability (same ID as S2 original images)
+var s2clouds = ee.ImageCollection('COPERNICUS/S2_CLOUD_PROBABILITY')
+  .filterBounds(AOI);
+
+// Join S2 with cloud probability dataset to add cloud mask.
+// Note: cloud_mask is added to the result as an additional property
+var sentinel2_clouds = ee.Join.saveFirst('cloud_mask').apply({
+  primary: sentinel2,
+  secondary: s2clouds,
+  condition: ee.Filter.equals({
+    leftField: 'fileID', rightField: 'system:index'})
 });
 
-// UNIR LAS DOS COLECCIONES
-var S2_SR = ee.ImageCollection(S2_6sn.merge(sentinel2n));
+// Mask clouds and shadows and compute VI
+var sentinel2_mask = ee.ImageCollection(sentinel2_clouds)
+  .map(applyCloudMask).map(applyShadowMask).map(computeVI);
 
-// ·············| APLICAR LA MÁSCARA DE NUBES |·················\\
-// Función que crea la máscara de nubes, en función del umbral
-// establecido previamente {max_probN}
-var aplicar_maskN = function(img){
-  // Crea la máscara con la banda del porcentaje de nubes dentro de la
-  // imagen unida a ambas colecciones en los pasos previos
-  var mask = ee.Image(img.get('cloud_mask'))
-             .select('probability').gt(max_probN).eq(0);
-  // Devuelve la imagen con la máscara aplicada
-  return img.updateMask(mask);
-};
+// View CLOUD_PROB and SHADOW_PROB values in action
+// Map.addLayer(ee.ImageCollection(sentinel2_clouds).first(), {bands:['B4','B3','B2'],min:0,max:0.3}, 'Original');
+// Map.addLayer(sentinel2_mask.first(), {bands:['B4','B3','B2'],min:0,max:0.3}, 'Masked');
 
-// Aplicar máscara de nubes a la colección
-var S2_filtroNubes = S2_SR.map(aplicar_maskN);
-
-// ·············| APLICAR LA MÁSCARA DE SOMBRAS |·················\\
-// Obtener la probabilidad de sombra en cada píxel
-var probSombras = S2_filtroNubes.map(projectShadows);
-
-// Obtener máscara de sombras, umbral definido previamente {max_probS}
-var aplicar_masks = function(img){
-var mask = img.select('shadowScore').gt(max_probS).eq(0);
-return img.updateMask(mask);
-};
-
-// Aplicar máscara de sombras
-var S2_maskNS = probSombras.map(aplicar_masks);
-
-// --------------- ÍNDICES DE VEGETACIÓN ----------------- \\
-
-// NDVI
-var NDVI = function(image){
-  var ndvi = image.normalizedDifference(['B8', 'B4'])
-  // Ajustar los valores evitando píxeles saturados y con suelo
-  .clamp(0.1, 0.8);
-  return ndvi.select([0], ['NDVI'])
-         .copyProperties(image, ['PRODUCT_ID',
-         'system:index', 'system:time_start']);
-};
-
-// NDRE
-var NDRE = function(image){
-  var ndre = image.normalizedDifference(['B7', 'B4'])
-  // Ajustar los valores evitando píxeles saturados y con suelo
-  //.clamp(0.1, 0.8);
-  return ndre.select([0], ['NDRE'])
-         .copyProperties(image, ['PRODUCT_ID',
-         'system:index', 'system:time_start']);
-};
-
-// IRECI
-var IRECI = function(image){
-  var ireci = image.expression(
-    '(re3-r)/(re1/re2)',
-    {
-      re3: image.select('B7'),
-      r: image.select('B4'),
-      re1: image.select('B5'),
-      re2: image.select('B6')
-    });
-  return ireci.select([0], ['IRECI'])
-         .copyProperties(image, ['PRODUCT_ID',
-         'system:index', 'system:time_start']);
-};
-
-// --------------- INICIO DE LA FUNCIÓN ----------------- \\
-
-var S2serietemporal = function(coleccion, IV,
-                              a_inicio,mes_inicio,dia_inicio,
-                              a_final,mes_final,dia_final){
+/**
+ * Get VI mean values over predefined crop seasons
+ * ===========================================================================
+ * The function iterate over season years and compute VI mean values over the
+ * images inside an image collection. Each VI band is reduced with cultivated
+ * crops in the image date crop season.
+ * 
+ * E.g.: A crop season from 2015-10-01 to 2016-07-31. One image captured in
+ * 2015-04-13 will be reduced using plots with more than 0 production units in
+ * 2016 campaign (2016 column inside the SHP with the plots).
+ * 
+ * Chart errors:
+ * 
+ * The function execution could be too low because of reduceRegion function.
+ * If this happens, it is possible to select only one VI band by 'vifilter'
+ * parameter. Write the name of the band which contains the VI, e.g.,
+ * VI_NDVI. These are calculated inside computeVI function.
+ * 
+ * If the chart wont be printed, added only one year inside 'season_years'
+ * parameter like this: 
+ * 
+ * getSeries(sentinel2_mask, ee.List([2016]), start, end);
+ * 
+ * The export function should take 4/5 minutes to download data for the
+ * three VIs and 4 crop seasons.
+ *
+ * @param {EEImageCollection} col It must contain images with VI bands. 
+ * @param {EEList} season_years Season start years
+ * @param {EEList} start MONTH and DAY numbers of the season start
+ * @param {EEList} end MONTH and DAY nummbers of the season end
+ * @param {String} vifilter String with vi band to select
+ * @returns FeatureCollection with CR mean value and image date.
+ */
+var getSeries = function(col, season_years, start, end, vifilter){
   
-  // Establecer el rango de años de la serie
-  var yearrangeStart = a_inicio;
-  var yearrangeStop = a_final;
+  // Default parameter
+  vifilter = vifilter || 'VI_[A-Za-z]+';
   
-  // Generar la coleccion con todas las imágenes
-  var col;
-     
-  // Funcion de recorte, en función de los recintos cultivados
-  var clip = function(image){return image.clip(cultivo)};
-  // La variable "cultivo" se define más adelante,
-  // integra las parcelas cultivadas en el ciclo seleccionado
+  // Iterate over season start years, returning a list.
+  var mean_vi = season_years.map(function(year){
+    
+    // Get season periods
+    var end_year = ee.Number(year).add(1);
+    var season_start = ee.Date.fromYMD(year, start.get(0), start.get(1));
+    var season_end = ee.Date.fromYMD(end_year, end.get(0), end.get(1));
+    
+    // Select images inside current season
+    var filtered_col = col.filterDate(season_start, season_end);
+    
+    // Filter cultivated fields inside the season last year
+    var str_year = season_end.get('year').format('%.0f'); // String mandatory
+    var cultivated_plots = AOI.filter(ee.Filter.gt(str_year, 0));
+    
+    /**
+     * Reduce VI over season cultivated plots
+     * =========================================
+     * Get bands with VI and obtain the mean value over the pixels
+     * masked inside the cultivated plots in a current season.
+     * 
+     * Note: It's mandatory having a FeatureCollection called
+     * "cultivated_plots".
+     * 
+     * @param {EEImage} img Image with VI bands.  
+     * @returns Feature with an image date and CR mean value.
+     */
+    var reduceVI = function(img){
+      // Select the VI bands (by regexp)
+      // var vi = img.select('VI_[A-Za-z]+');
+      var vi = img.select(vifilter);
+
+      // Reduce VI values over cultivated plots (it returns a dict)
+      var vi_mean = vi.reduceRegion(ee.Reducer.mean(), cultivated_plots);
+      // Note: The scale is computed automatically to avoid time consuming
+      
+      // Add image date
+      vi_mean = vi_mean.set('date', img.date());
+      
+      // Construct a Feature with the image date and the CR mean value
+      return ee.Feature(null, vi_mean);
+      
+    };
+
+    // Apply above function over all images inside filtered collection
+    var fc = filtered_col.map(reduceVI);
+    // The above line returns a FeatureCollection with equal number of
+    // features than filtered images
+
+    // Important: A map() method applied over an ee.List must return a list.
+    // In order to return a list, each feature inside prior FeatureCollection
+    // is passed inside a list: [<Feature>,<Feature>,...]
+    return fc.toList(100); // The max entities number is mandatory.
+    
+  });
   
-// ··········| Cálculo de las series temporales |············\\
-  
-  // Loop a través de los años (el código siguiente se ejecuta para cada año)
-  for(var loopYear = yearrangeStart; loopYear < yearrangeStop; loopYear +=1){
-    // Seleccionar la temporada de producción con la que seleccionar recintos
-    var prod_temp = loopYear += 1;
-    // Se suma un año, pues los valores de producción utilizados en el 
-    // filtro de parcelas están en el año siguiente al comienzo de la temporada
-    
-    // Se vuelve al año inicial de la temporada
-    loopYear -= 1;
-    
-    // Seleccionar los campos sembrados con cebada en la temporada
-    var cultivo = AOI.filter(ee.Filter.gt(prod_temp.toString(), 1));
-    
-    // Seleccionar las fechas de filtrado (de temporada en temporada)
-    // La temporada de la cebada comienza en octubre y finaliza en julio
-    var start = ee.Date.fromYMD(loopYear, mes_inicio, dia_inicio);
-    var end = ee.Date.fromYMD(loopYear +=1, mes_final, dia_final);
+  // The object mean_cr is a list of lists with Features
+  // [[<Feature>,<Feature>,...],[],...]
 
-    // Filtrar la colección por fecha y recortar la colección con 
-    // los recintos anteriores
-    var imgClip = coleccion.filterDate(start, end).map(clip);
-    
-    // Aplicar la función del IV llamado en la función
-    var imgIV = imgClip.map(IV);
+  // Obtain a FeatureCollection with all Features
+  // 1) Flatten the list (get only one list with all features)
+  // 2) Transform its to a FeatureCollection
+  return ee.FeatureCollection(mean_vi.flatten());
+};
 
-    // Volver al año de inicio
-    loopYear -= 1;
+// Apply getSeries with custom season parameters
+// Note: Inside the example agricultural holding plots (barley), 
+// the season starts in early October and ends in late July.
 
-    // Condicional IF:
-    // Si el bucle trabaja con el primer año de la serie crea la colección
-    // El primer año crea la colección
-    if(loopYear == a_inicio){
-      col = imgIV;
-    // El resto de años incluirá las imágenes en la coleccion anterior
-    } else if(loopYear > a_inicio && loopYear < a_final){ 
-      col = col.merge(imgIV);
-    }
-  } // Fin del bucle FOR
+// Season start years
+var years = ee.List.sequence(2015, 2019);
+// Season start: month and day
+var start = ee.List([10,1]);
+// Season end: month and day
+var end = ee.List([8,1]);
+// End is exclusive in ee.ImageCollection.filterDate(start,end)
 
-// Crear el gráfico
-  var chart = ui.Chart.image.series({
-    imageCollection: col,
-      region: AOI,
-      // Calcular la media de cada imagen
-      reducer: ee.Reducer.mean(), //opciones= mean, median, stdDev, sum
-      scale: 20
-    });
+// Get FeatureCollection with all images reduced by cultivated fields
+var vi_mean = getSeries(sentinel2_mask, years, start, end).sort('date');
 
-// Definir el nombre del gráfico en función de los años de la serie temporal
-  var filename = "".concat(a_inicio.toString())
-      .concat('-').concat(a_final.toString());
-  print(chart);
-};// Fin de la función
+print('Number of computed images:', vi_mean.size());
 
-// --------     LLAMAR A LA FUNCIÓN PRINCIPAL     -------------- \\
-S2serietemporal(S2_maskNS, IRECI, 2015,10,1,2020,7,31);
+// Plot values in a chart
+var chart = ui.Chart.feature.byFeature(vi_mean, 'date', 'VI_NDVI');
+print(chart);
+
+// Export FeatureCollection to CSV
+Export.table.toDrive({
+  collection: vi_mean,
+  description: 'Export_vi_mean_over_cultivated_plots',
+  folder: 'data',
+  fileNamePrefix: 'vi_mean'
+});
+// Note: system:index property is the image ID from the VI mean is computed.
