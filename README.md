@@ -1,5 +1,7 @@
 # Extract indices over agricultural plots
 
+Available languages: [Spanish](https://github.com/CristianICS/sentinel-iv-gee/blob/main/README_esp.md)
+
 Functions written in JavaScript for the Google Earth Engine API that enable the extraction of vegetation indices from Sentinel-1 and Sentinel-2 satellite imagery over agricultural plots, specifically those undergoing crop rotation.
 
 Note: The file c6s_S2_batch.ipynb can be used to correct S2 images in a loop via [Google Colaboratory](https://colab.research.google.com/?utm_source=scs-index).
@@ -46,5 +48,7 @@ In the Sentinel-2 function's code, the second section allows the integration of 
 The file `c6s_S2_batch.ipynb` allows the 6S correction to be applied in a loop from Google Colaboratory. Download the file and upload it to Colab via the `File > Upload Notebook` option.
 
 Important: Registration with the EarthEngine API in Python is done using the ID of a project in Google Cloud. A Google account and a Cloud project are required, which can be created by accessing the [Google Cloud Console](https://console.cloud.google.com/welcome).
+
+![Find the project ID in Goolge Cloud.](https://github.com/CristianICS/sentinel-iv-gee/assets/58115393/90e9975f-6173-4899-b0bb-8f9ce9fa09b7)
 
 The 6S correction can also be performed in a console with the [Py6S](https://py6s.readthedocs.io/en/latest/) and [EarthEngine API](https://developers.google.com/earth-engine/guides/python_install-conda#windows) packages installed (a [conda](https://docs.conda.io/projects/miniconda/en/latest/) workflow is recommended, as the Py6S module can be downloaded with the compiled 6S model). The code is the same as that used in the Colab file, but authentication must be done in the console (`EarthEngine` module installed). Instead of the function `ee.Authenticate()`, the command `earthengine authenticate` should be entered in the console.
