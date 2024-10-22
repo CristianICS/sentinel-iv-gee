@@ -1,5 +1,7 @@
 # Extract indices over agricultural plots
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.4318779.svg)](https://doi.org/10.5281/zenodo.4318780)
+
 Available languages: [Spanish](https://github.com/CristianICS/sentinel-iv-gee/blob/main/README_esp.md)
 
 Functions written in JavaScript for the Google Earth Engine API that enable the extraction of vegetation indices from Sentinel-1 and Sentinel-2 satellite imagery over agricultural plots, specifically those undergoing crop rotation.
